@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/Flpvoigt/Golang_project/internal/receiver"
+	"github.com/Flpvoigt/Golang_project/internal/sender"
 )
 
 const helpText = `GoDrop envia arquivos diretamente entre computadores na mesma rede.
@@ -19,6 +22,7 @@ Comandos:
   help       Exibe esta ajuda
   version    Exibe a versão instalada
   receive    Recebe arquivos enviados pela rede local
+  send       Envia um arquivo para outro computador
 `
 
 // Version can be replaced at build time with -ldflags.
@@ -40,11 +44,37 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "receive":
 		return runReceive(args[1:], stdout, stderr)
+	case "send":
+		return runSend(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "comando desconhecido: %s\n", args[0])
 		fmt.Fprintln(stderr, "use 'godrop help' para ver os comandos disponíveis")
 		return 2
 	}
+}
+
+func runSend(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("send", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	target := flags.String("to", "", "endereço do receptor, por exemplo 192.168.1.20:8080")
+	timeout := flags.Duration("timeout", 30*time.Minute, "tempo máximo da transferência")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if *target == "" || flags.NArg() != 1 {
+		fmt.Fprintln(stderr, "uso: godrop send --to <endereço> <arquivo>")
+		return 2
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+	result, err := sender.Send(ctx, http.DefaultClient, *target, flags.Arg(0), stdout)
+	if err != nil {
+		fmt.Fprintf(stderr, "não foi possível enviar o arquivo: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Enviado: %d bytes\nSHA-256: %s\n", result.Bytes, result.Checksum)
+	return 0
 }
 
 func runReceive(args []string, stdout, stderr io.Writer) int {
