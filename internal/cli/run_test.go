@@ -50,3 +50,16 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 		t.Fatalf("Run() stderr = %q, want error message", stderr.String())
 	}
 }
+
+func TestRunRejectsInvalidReceivePort(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := Run([]string{"receive", "--port", "70000"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("Run() code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "porta") {
+		t.Fatalf("Run() stderr = %q, want port error", stderr.String())
+	}
+}
